@@ -13,84 +13,82 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 }
 
+// runCmd concatenates the contents of all files in a given directory and writes them to a text file.
 var runCmd = &cobra.Command{
-	Use:   "run",
-	Short: "Traverse a directory and output all file contents into a .txt file",
+	Use:   "run [path]",
+	Short: "Traverse a folder and output all file contents into a .txt file",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		rootDir, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get current directory: %w", err)
-		}
-
-		tempFile, err := os.CreateTemp(rootDir, "cliptree_*.txt")
-		if err != nil {
-			return fmt.Errorf("failed to create temp file: %w", err)
-		}
-		defer func() {
-			if err := tempFile.Close(); err != nil {
-				safeFprintf(os.Stderr, "Warning: failed to close temp file: %v\n", err)
+		// Determine root path to walk
+		var rootDir string
+		if len(args) > 0 {
+			var err error
+			rootDir, err = filepath.Abs(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid path: %w", err)
 			}
-		}()
+		} else {
+			// Default to current directory
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %w", err)
+			}
+			rootDir = cwd
+		}
 
-		fmt.Printf("Creating output file at: %s\n", tempFile.Name())
+		// Create output file in CWD
+		outputFilePath := "cliptree_output.txt"
+		outputFile, err := os.Create(outputFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %w", err)
+		}
+		defer func(outputFile *os.File) {
+			err := outputFile.Close()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to close temp file: %v\n", err)
+			}
+		}(outputFile)
 
+		fmt.Printf("Writing concatenated contents to: %s\n", outputFilePath)
+
+		// Walk directory recursively
 		err = filepath.WalkDir(rootDir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
-				return fmt.Errorf("error accessing path %s: %w", path, err)
+				return err
 			}
 			if d.IsDir() {
 				return nil
 			}
 
-			// Write file path
-			relPath, err := filepath.Rel(rootDir, path)
-			if err != nil {
-				return fmt.Errorf("error getting relative path for %s: %w", path, err)
-			}
+			// Calculate relative path to display
+			relPath, _ := filepath.Rel(rootDir, path)
+			fmt.Fprintf(outputFile, "==> ./%s\n", relPath)
 
-			safeFprintf(tempFile, "==> ./%s\n", relPath)
-
-			// Copy file content
+			// Open file and copy content
 			f, err := os.Open(path)
-			if err != nil {
-				return fmt.Errorf("failed to open %s: %w", path, err)
-			}
-			defer func() {
-				if err := f.Close(); err != nil {
-					safeFprintf(os.Stderr, "Warning: failed to close %s: %v\n", path, err)
-				}
-			}()
-
-			_, err = io.Copy(tempFile, f)
 			if err != nil {
 				return err
 			}
-			safeFprintln(tempFile, "\n") // separate files
+			defer func(f *os.File) {
+				err := f.Close()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to close temp file: %v\n", err)
+				}
+			}(f)
+
+			_, err = io.Copy(outputFile, f)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(outputFile) // Add newline between files
 
 			return nil
 		})
-
 		if err != nil {
-			return fmt.Errorf("error walking directory: %w", err)
+			return fmt.Errorf("error while traversing: %w", err)
 		}
 
-		fmt.Println("File contents written successfully.")
+		fmt.Println("✅ File contents written successfully.")
 		return nil
 	},
-}
-
-// safeFprintf is a wrapper around fmt.Fprintf that panics if the write fails.
-func safeFprintf(file io.Writer, format string, a ...any) {
-	_, err := fmt.Fprintf(file, format, a...)
-	if err != nil {
-		panic(fmt.Sprintf("Warning: failed to write to temp file: {%v}\n", err))
-	}
-}
-
-// safeFprintln is a wrapper around fmt.Fprintln that panics if the write fails.
-func safeFprintln(file io.Writer, a ...any) {
-	_, err := fmt.Fprintln(file, a...)
-	if err != nil {
-		panic(fmt.Sprintf("Warning: failed to write to temp file: {%v}\n", err))
-	}
 }
