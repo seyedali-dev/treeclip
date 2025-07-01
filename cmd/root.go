@@ -1,3 +1,4 @@
+// Package cmd houses all CLI commands and flags.
 package cmd
 
 import (

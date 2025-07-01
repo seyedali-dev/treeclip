@@ -1,3 +1,4 @@
+// Package cmd. runCmd handles directory traversal and file concatenation.
 package cmd
 
 import (
