@@ -69,6 +69,7 @@ Examples:
 				fmt.Fprintf(os.Stderr, "Warning: failed to close output file: %v\n", err)
 			}
 		}(outputFile)
+		fmt.Fprintln(outputFile, "// Paths are displayed in Unix-style format (forward slashes) for cross-platform consistency")
 
 		// Add default exclusions to prevent infinite loops and common unwanted files
 		defaultExclusions := []string{
@@ -107,15 +108,16 @@ Examples:
 			if err != nil {
 				return err
 			}
+			normalizedCrossPlatformRelPath := filepath.ToSlash(relPath)
 
 			// Check if current path should be excluded (using combined patterns)
 			if shouldExclude(relPath, d.Name(), d.IsDir(), allExcludePatterns) {
 				filesSkipped++
 				if d.IsDir() {
-					fmt.Printf("⏭️  Skipping directory: %s\n", relPath)
+					fmt.Printf("⏭️  Skipping directory: %s\n", normalizedCrossPlatformRelPath)
 					return filepath.SkipDir // Skip entire directory
 				}
-				fmt.Printf("⏭️  Skipping file: %s\n", relPath)
+				fmt.Printf("⏭️  Skipping file: %s\n", normalizedCrossPlatformRelPath)
 				return nil
 			}
 
@@ -125,15 +127,15 @@ Examples:
 			}
 
 			filesProcessed++
-			fmt.Printf("📖 Processing: %s\n", relPath)
+			fmt.Printf("📖 Processing: %s\n", normalizedCrossPlatformRelPath)
 
 			// Write file header with relative path
-			fmt.Fprintf(outputFile, "==> ./%s\n", relPath)
+			fmt.Fprintf(outputFile, "==> %s\n", normalizedCrossPlatformRelPath)
 
 			// Open file and copy content
 			f, err := os.Open(path)
 			if err != nil {
-				fmt.Printf("⚠️  Warning: failed to open %s: %v\n", relPath, err)
+				fmt.Printf("⚠️  Warning: failed to open %s: %v\n", normalizedCrossPlatformRelPath, err)
 				fmt.Fprintf(outputFile, "[ERROR: Could not read file - %v]\n\n", err)
 				return nil // Continue processing other files
 			}
@@ -147,7 +149,7 @@ Examples:
 			// Copy file content to output
 			_, err = io.Copy(outputFile, f)
 			if err != nil {
-				fmt.Printf("⚠️  Warning: failed to copy content from %s: %v\n", relPath, err)
+				fmt.Printf("⚠️  Warning: failed to copy content from %s: %v\n", normalizedCrossPlatformRelPath, err)
 				fmt.Fprintf(outputFile, "[ERROR: Could not copy file content - %v]\n", err)
 			}
 
