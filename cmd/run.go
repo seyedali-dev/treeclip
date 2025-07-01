@@ -91,7 +91,7 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
-		fmt.Fprintln(outputFile, "// Paths are displayed in Unix-style format (forward slashes) for cross-platform consistency")
+		fmt.Fprintln(outputFile, "// 💡Paths are displayed in Unix-style format (forward slashes) for cross-platform consistency")
 
 		// Add default exclusions to prevent infinite loops and common unwanted files
 		defaultExclusions := []string{
@@ -109,12 +109,12 @@ Examples:
 		// Combine user patterns with default exclusions
 		allExcludePatterns := append(excludePatterns, defaultExclusions...)
 
-		fmt.Printf("🔍 Scanning directory: %s\n", rootDir)
+		fmt.Printf("🔍  Scanning directory: %s\n", rootDir)
 		if len(excludePatterns) > 0 {
-			fmt.Printf("🚫 User exclusions: %v\n", excludePatterns)
+			fmt.Printf("🚫  User exclusions: %v\n", excludePatterns)
 		}
 		fmt.Printf("🛡️  Default exclusions: %v\n", defaultExclusions)
-		fmt.Printf("📄 Writing concatenated contents to: %s\n", outputFilePath)
+		fmt.Printf("📄  Writing concatenated contents to: %s\n\n", outputFilePath)
 
 		var filesProcessed int
 		var filesSkipped int
@@ -149,7 +149,7 @@ Examples:
 			}
 
 			filesProcessed++
-			fmt.Printf("📖 Processing: %s\n", normalizedCrossPlatformRelPath)
+			fmt.Printf("📖  Processing: %s\n", normalizedCrossPlatformRelPath)
 
 			// Write file header with relative path
 			fmt.Fprintf(outputFile, "==> %s\n", normalizedCrossPlatformRelPath)
@@ -158,7 +158,7 @@ Examples:
 			f, err := os.Open(path)
 			if err != nil {
 				fmt.Printf("⚠️  Warning: failed to open %s: %v\n", normalizedCrossPlatformRelPath, err)
-				fmt.Fprintf(outputFile, "❌🪲 [ERROR: Could not read file - %v]\n\n", err)
+				fmt.Fprintf(outputFile, "❌🪲  [ERROR: Could not read file - %v]\n\n", err)
 				return nil // Continue processing other files
 			}
 			defer func(f *os.File) {
@@ -172,7 +172,7 @@ Examples:
 			_, err = io.Copy(outputFile, f)
 			if err != nil {
 				fmt.Printf("⚠️  Warning: failed to copy content from %s: %v\n", normalizedCrossPlatformRelPath, err)
-				fmt.Fprintf(outputFile, "[ERROR: Could not copy file content - %v]\n", err)
+				fmt.Fprintf(outputFile, "❌🪲  [ERROR: Could not copy file content - %v]\n", err)
 			}
 
 			// Add separator between files
@@ -196,7 +196,7 @@ Examples:
 
 		// Read the output file content for clipboard if enabled
 		if clipboardEnabled {
-			fmt.Printf("📋 Copying content to clipboard...\n")
+			fmt.Printf("\n📋  Copying content to clipboard...\n")
 			clipboardContent, err := os.ReadFile(outputFilePath)
 			if err != nil {
 				return fmt.Errorf("failed to read output file for clipboard: %w", err)
@@ -206,9 +206,9 @@ Examples:
 			err = clipboard.WriteAll(string(clipboardContent))
 			if err != nil {
 				fmt.Printf("⚠️  Warning: failed to copy to clipboard: %v\n", err)
-				fmt.Printf("💡 Content is still available in: %s\n", outputFilePath)
+				fmt.Printf("💡  Content is still available in: %s\n", outputFilePath)
 			} else {
-				fmt.Printf("\n✅ Content copied to clipboard successfully!\n")
+				fmt.Printf("✅  Content copied to clipboard successfully! (U ω U)\n")
 
 				// Show clipboard statistics if requested
 				if showClipboardStats {
@@ -217,23 +217,25 @@ Examples:
 					chars := len(contentStr)
 					words := len(strings.Fields(contentStr))
 
-					fmt.Printf("\n📊 Clipboard content stats:\n")
-					fmt.Printf("   📝 Characters: %s\n", formatNumber(chars))
-					fmt.Printf("   📄 Lines: %s\n", formatNumber(len(lines)))
-					fmt.Printf("   💬 Words: %s\n", formatNumber(words))
+					fmt.Printf("📊  Clipboard content stats:\n")
+					fmt.Printf("   📝  Characters: %s\n", formatNumber(chars))
+					fmt.Printf("   📄  Lines: %s\n", formatNumber(len(lines)))
+					fmt.Printf("   💬  Words: %s\n", formatNumber(words))
 
 					// Show size in human-readable format
 					fmt.Printf("   💾 Size: %s\n", formatBytes(int64(chars)))
 				}
 			}
 		} else {
-			fmt.Printf("📋 Clipboard copy skipped (disabled)\n")
+			fmt.Printf("\n📋  Clipboard copy skipped (disabled) ╰（‵□′）╯\n")
 		}
 
-		fmt.Printf("\n🎉 Process completed!\n")
-		fmt.Printf("📊 Files processed: %d\n", filesProcessed)
-		fmt.Printf("🚫 Files/folders skipped: %d\n", filesSkipped)
-		fmt.Printf("📄 Output file: %s\n", outputFilePath)
+		fmt.Printf("\n------------ (●'◡'●) ------------\n")
+		fmt.Printf("🎉  Process completed!\n")
+		fmt.Printf("📊  Files processed: %d\n", filesProcessed)
+		fmt.Printf("🚫  Files/folders skipped: %d\n", filesSkipped)
+		fmt.Printf("📄  Output file: %s\n", outputFilePath)
+		fmt.Println("\n\n  tototo!  ㄟ( ▔, ▔ )ㄏ")
 		return nil
 	},
 }
