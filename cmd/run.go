@@ -37,7 +37,7 @@ var runCmd = &cobra.Command{
 		}
 
 		// Create output file in CWD
-		outputFilePath := "cliptree_output.txt"
+		outputFilePath := "treeclip_output.txt"
 		outputFile, err := os.Create(outputFilePath)
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)

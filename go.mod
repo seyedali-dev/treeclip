@@ -1,4 +1,4 @@
-module github.com/seyedali-dev/cliptree
+module github.com/seyedali-dev/treeclip
 
 go 1.24.0
 

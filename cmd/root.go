@@ -7,8 +7,8 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "cliptree",
-	Short: "ClipTree – copy directory contents to clipboard and editor",
+	Use:   "treeclip",
+	Short: "treeclip – copy directory contents to clipboard and editor",
 }
 
 func Execute() {
