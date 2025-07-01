@@ -8,18 +8,45 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/spf13/cobra"
 )
 
 // excludePatterns holds the patterns to exclude during directory traversal
 var excludePatterns []string
 
+// clipboardEnabled controls whether to copy output to clipboard
+var clipboardEnabled bool
+
+// showClipboardStats shows clipboard content statistics
+var showClipboardStats bool
+
 func init() {
 	rootCmd.AddCommand(runCmd)
 
 	// Add the --exclude flag that can be used multiple times
-	runCmd.Flags().StringSliceVarP(&excludePatterns, "exclude", "e", []string{},
-		"Exclude files/folders matching these patterns (can be used multiple times)")
+	runCmd.Flags().StringSliceVarP(
+		&excludePatterns,
+		"exclude",
+		"e",
+		[]string{},
+		"Exclude files/folders matching these patterns (can be used multiple times)",
+	)
+
+	// Add clipboard-related flags
+	runCmd.Flags().BoolVarP(
+		&clipboardEnabled,
+		"clipboard",
+		"c",
+		true,
+		"Copy output to clipboard",
+	)
+	runCmd.Flags().BoolVar(
+		&showClipboardStats,
+		"stats",
+		false,
+		"Show clipboard content statistics",
+	)
 }
 
 // runCmd concatenates the contents of all files in a given directory and writes them to a text file.
@@ -29,10 +56,11 @@ var runCmd = &cobra.Command{
 	Long: `Traverse a folder recursively and output all file contents into a .txt file.
     
 Examples:
-  treeclip run                                     # Current directory
+  treeclip run                                     # Current directory, copy to clipboard
   treeclip run /path/to/dir                        # Specific directory
   treeclip run --exclude "*.log" --exclude "*.tmp" # Exclude patterns
-  treeclip run -e "*.md" -e "folder1" -e "app.go"  # Multiple exclusions`,
+  treeclip run -e "*.md" -e "folder1" -e "app.go"  # Multiple exclusions
+  treeclip run --stats                             # Show content statistics`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Determine root path to walk
@@ -63,12 +91,6 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
-		defer func(outputFile *os.File) {
-			err := outputFile.Close()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to close output file: %v\n", err)
-			}
-		}(outputFile)
 		fmt.Fprintln(outputFile, "// Paths are displayed in Unix-style format (forward slashes) for cross-platform consistency")
 
 		// Add default exclusions to prevent infinite loops and common unwanted files
@@ -136,13 +158,13 @@ Examples:
 			f, err := os.Open(path)
 			if err != nil {
 				fmt.Printf("⚠️  Warning: failed to open %s: %v\n", normalizedCrossPlatformRelPath, err)
-				fmt.Fprintf(outputFile, "[ERROR: Could not read file - %v]\n\n", err)
+				fmt.Fprintf(outputFile, "❌🪲 [ERROR: Could not read file - %v]\n\n", err)
 				return nil // Continue processing other files
 			}
 			defer func(f *os.File) {
 				err := f.Close()
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to close file %s: %v\n", path, err)
+					fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to close file %s: %v\n", path, err)
 				}
 			}(f)
 
@@ -164,9 +186,54 @@ Examples:
 			return fmt.Errorf("error while traversing directory: %w", err)
 		}
 
-		fmt.Printf("\n✅ File contents written successfully!\n")
+		// Close the output file before reading it for clipboard
+		defer func(outputFile *os.File) {
+			err := outputFile.Close()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to close output file: %v\n", err)
+			}
+		}(outputFile)
+
+		// Read the output file content for clipboard if enabled
+		if clipboardEnabled {
+			fmt.Printf("📋 Copying content to clipboard...\n")
+			clipboardContent, err := os.ReadFile(outputFilePath)
+			if err != nil {
+				return fmt.Errorf("failed to read output file for clipboard: %w", err)
+			}
+
+			// Copy to clipboard
+			err = clipboard.WriteAll(string(clipboardContent))
+			if err != nil {
+				fmt.Printf("⚠️  Warning: failed to copy to clipboard: %v\n", err)
+				fmt.Printf("💡 Content is still available in: %s\n", outputFilePath)
+			} else {
+				fmt.Printf("\n✅ Content copied to clipboard successfully!\n")
+
+				// Show clipboard statistics if requested
+				if showClipboardStats {
+					contentStr := string(clipboardContent)
+					lines := strings.Split(contentStr, "\n")
+					chars := len(contentStr)
+					words := len(strings.Fields(contentStr))
+
+					fmt.Printf("\n📊 Clipboard content stats:\n")
+					fmt.Printf("   📝 Characters: %s\n", formatNumber(chars))
+					fmt.Printf("   📄 Lines: %s\n", formatNumber(len(lines)))
+					fmt.Printf("   💬 Words: %s\n", formatNumber(words))
+
+					// Show size in human-readable format
+					fmt.Printf("   💾 Size: %s\n", formatBytes(int64(chars)))
+				}
+			}
+		} else {
+			fmt.Printf("📋 Clipboard copy skipped (disabled)\n")
+		}
+
+		fmt.Printf("\n🎉 Process completed!\n")
 		fmt.Printf("📊 Files processed: %d\n", filesProcessed)
 		fmt.Printf("🚫 Files/folders skipped: %d\n", filesSkipped)
+		fmt.Printf("📄 Output file: %s\n", outputFilePath)
 		return nil
 	},
 }
@@ -228,4 +295,36 @@ func shouldExclude(relPath, name string, isDir bool, patterns []string) bool {
 	}
 
 	return false
+}
+
+// formatNumber adds thousand separators to make large numbers more readable
+func formatNumber(n int) string {
+	str := fmt.Sprintf("%d", n)
+	if len(str) <= 3 {
+		return str
+	}
+
+	// Add commas every 3 digits from the right
+	var result strings.Builder
+	for i, digit := range str {
+		if i > 0 && (len(str)-i)%3 == 0 {
+			result.WriteString(",")
+		}
+		result.WriteRune(digit)
+	}
+	return result.String()
+}
+
+// formatBytes converts bytes to human-readable format (B, KB, MB, GB)
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
