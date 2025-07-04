@@ -113,6 +113,7 @@ Examples:
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
 		fmt.Fprintln(outputFile, "// 💡Paths are displayed in Unix-style format (forward slashes) for cross-platform consistency")
+		fmt.Fprintln(outputFile)
 
 		// Add default exclusions to prevent infinite loops and common unwanted files
 		defaultExclusions := []string{
