@@ -19,6 +19,7 @@ var (
 	clipboardEnabled   bool     // clipboardEnabled controls whether to copy output to clipboard.
 	showClipboardStats bool     // showClipboardStats shows clipboard content statistics.
 	editorEnabled      bool     // editorEnabled controls whether to open the output file in a text editor.
+	deleteAfterEditor  bool     // deleteAfterEditor controls whether the output file should be deleted after the editor closes.
 )
 
 func init() {
@@ -56,6 +57,15 @@ func init() {
 		false,
 		"Open output file in the default text editor",
 	)
+
+	// Add the --delete flag to delete the temp file after exiting editor
+	runCmd.Flags().BoolVarP(
+		&deleteAfterEditor,
+		"delete",
+		"d",
+		true,
+		"Delete the output file after editor is closed",
+	)
 }
 
 // runCmd concatenates the contents of all files in a given directory and writes them to a text file.
@@ -70,7 +80,8 @@ Examples:
   treeclip run --exclude "*.log" --exclude "*.tmp" # Exclude patterns
   treeclip run -e "*.md" -e "folder1" -e "app.go"  # Multiple exclusions
   treeclip run --stats                             # Show content statistics
-  treeclip run --editor                            # Open output file in the default text editor`,
+  treeclip run --editor                            # Open output file in the default text editor
+  treeclip run --delete                            # Delete the output file after editor is closed`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Determine root path to walk
@@ -171,12 +182,6 @@ Examples:
 				fmt.Fprintf(outputFile, "❌🪲  [ERROR: Could not read file - %v]\n\n", err)
 				return nil // Continue processing other files
 			}
-			defer func(f *os.File) {
-				err := f.Close()
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to close file %s: %v\n", path, err)
-				}
-			}(f)
 
 			// Copy file content to output
 			_, err = io.Copy(outputFile, f)
@@ -197,12 +202,9 @@ Examples:
 		}
 
 		// Close the output file before reading it for clipboard
-		defer func(outputFile *os.File) {
-			err := outputFile.Close()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to close output file: %v\n", err)
-			}
-		}(outputFile)
+		if err := outputFile.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to close output file: %v\n", err)
+		}
 
 		// Read the output file content for clipboard if enabled
 		if clipboardEnabled {
@@ -233,7 +235,7 @@ Examples:
 					fmt.Printf("   💬  Words: %s\n", formatNumber(words))
 
 					// Show size in human-readable format
-					fmt.Printf("   💾 Size: %s\n", formatBytes(int64(chars)))
+					fmt.Printf("   💾  Size: %s\n", formatBytes(int64(chars)))
 				}
 			}
 		} else {
@@ -242,12 +244,26 @@ Examples:
 
 		if editorEnabled {
 			fmt.Println("\n📝  Opening file in default text editor...")
+			if deleteAfterEditor {
+				fmt.Println("⚠️  Warning! Will delete the temporary file after editor closes 🗑️")
+			}
 
 			err := openInEditor(outputFilePath)
 			if err != nil {
 				fmt.Printf("⚠️  Warning: failed to open editor: %v\n", err)
 			} else {
 				fmt.Println("✅  Editor closed. Proceeding...")
+
+				if deleteAfterEditor {
+					fmt.Println()
+					fmt.Println("🗑️  Attempting to delete the temp file")
+					err := os.Remove(outputFilePath)
+					if err != nil {
+						fmt.Printf("⚠️  Warning: failed to delete file: %v\n", err)
+					} else {
+						fmt.Printf("🧽  Output temp file deleted: %s\n", outputFilePath)
+					}
+				}
 			}
 		}
 
@@ -352,17 +368,17 @@ func formatBytes(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// openInEditor opens the given file in the system's default text editor.
+// openInEditor opens the given file in the system's default text editor and waits for it to close.
 func openInEditor(filePath string) error {
 	var cmd *exec.Cmd
 
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", filePath)
+		cmd = exec.Command("open", "-W", filePath) //TODO: test me!
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", filePath)
+		cmd = exec.Command("cmd", "/C", "start", "/WAIT", filePath)
 	default: // Linux and others
-		cmd = exec.Command("xdg-open", filePath)
+		cmd = exec.Command("xdg-open", filePath) //TODO: test me!
 	}
 
 	cmd.Stdout = os.Stdout
