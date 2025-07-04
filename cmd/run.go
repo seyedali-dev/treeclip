@@ -114,6 +114,7 @@ Examples:
 		}
 		fmt.Fprintln(outputFile, "// 💡Paths are displayed in Unix-style format (forward slashes) for cross-platform consistency")
 		fmt.Fprintln(outputFile)
+		fmt.Printf("🔍  Scanning directory: %s (¬‿¬)\n", rootDir)
 
 		// Add default exclusions to prevent infinite loops and common unwanted files
 		defaultExclusions := []string{
@@ -128,12 +129,25 @@ Examples:
 			"Thumbs.db",
 		}
 
-		// Combine user patterns with default exclusions
-		allExcludePatterns := append(excludePatterns, defaultExclusions...)
+		// Load .treeclipignore patterns from root directory
+		ignoreFilePatterns, err := loadIgnorePatterns(rootDir)
+		if err != nil {
+			return err
+		}
+		if len(ignoreFilePatterns) > 0 {
+			fmt.Printf("📁  .treeclipignore loaded: %v (ᵔᴥᵔ)\n", ignoreFilePatterns)
+		}
 
-		fmt.Printf("🔍  Scanning directory: %s (¬‿¬)\n", rootDir)
+		// Merge all: CLI flags + .treeclipignore + defaults
+		allExcludePatterns := append([]string{}, excludePatterns...)
+		allExcludePatterns = append(allExcludePatterns, ignoreFilePatterns...)
+		allExcludePatterns = append(allExcludePatterns, defaultExclusions...)
+
 		if len(excludePatterns) > 0 {
-			fmt.Printf("🚫  User exclusions: %v (｀へ´)\n", excludePatterns)
+			fmt.Printf("🚫  User CLI command exclusions: %v (｀へ´)\n", excludePatterns)
+		}
+		if len(ignoreFilePatterns) > 0 {
+			fmt.Printf("🚫  User .treeclipignore exclusions: %v (｀へ´)\n", ignoreFilePatterns)
 		}
 		fmt.Printf("🛡️  Default exclusions: %v (◕‿◕)\n", defaultExclusions)
 		fmt.Printf("📄  Writing concatenated contents to: %s (ᵔᴥᵔ)\n\n", outputFilePath)
@@ -378,4 +392,36 @@ func openInEditor(filePath string) error {
 	cmd.Stdin = os.Stdin
 
 	return cmd.Run()
+}
+
+// loadIgnorePatterns reads .treeclipignore from the given root path and returns a slice of patterns.
+func loadIgnorePatterns(rootPath string) ([]string, error) {
+	var patterns []string
+
+	ignoreFilePath := filepath.Join(rootPath, ".treeclipignore")
+
+	content, err := os.ReadFile(ignoreFilePath)
+	if err != nil {
+		// File does not exist — not an error
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read .treeclipignore: %w (ノಠ益ಠ)ノ", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Normalize slashes for cross-platform support
+		line = filepath.ToSlash(line)
+		patterns = append(patterns, line)
+	}
+
+	return patterns, nil
 }
