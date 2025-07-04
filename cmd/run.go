@@ -5,21 +5,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/atotto/clipboard"
 	"github.com/spf13/cobra"
 )
 
-// excludePatterns holds the patterns to exclude during directory traversal
-var excludePatterns []string
-
-// clipboardEnabled controls whether to copy output to clipboard
-var clipboardEnabled bool
-
-// showClipboardStats shows clipboard content statistics
-var showClipboardStats bool
+var (
+	excludePatterns    []string // excludePatterns holds the patterns to exclude during directory traversal.
+	clipboardEnabled   bool     // clipboardEnabled controls whether to copy output to clipboard.
+	showClipboardStats bool     // showClipboardStats shows clipboard content statistics.
+	editorEnabled      bool     // editorEnabled controls whether to open the output file in a text editor.
+)
 
 func init() {
 	rootCmd.AddCommand(runCmd)
@@ -47,11 +47,20 @@ func init() {
 		false,
 		"Show clipboard content statistics",
 	)
+
+	// Add the --editor flag to open the extracted text into a default editor
+	runCmd.Flags().BoolVarP(
+		&editorEnabled,
+		"editor",
+		"o",
+		false,
+		"Open output file in the default text editor",
+	)
 }
 
 // runCmd concatenates the contents of all files in a given directory and writes them to a text file.
 var runCmd = &cobra.Command{
-	Use:   "run [path]",
+	Use:   "run [path | cwd if empty]",
 	Short: "Traverse a folder and output all file contents into a .txt file",
 	Long: `Traverse a folder recursively and output all file contents into a .txt file.
     
@@ -60,7 +69,8 @@ Examples:
   treeclip run /path/to/dir                        # Specific directory
   treeclip run --exclude "*.log" --exclude "*.tmp" # Exclude patterns
   treeclip run -e "*.md" -e "folder1" -e "app.go"  # Multiple exclusions
-  treeclip run --stats                             # Show content statistics`,
+  treeclip run --stats                             # Show content statistics
+  treeclip run --editor                            # Open output file in the default text editor`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Determine root path to walk
@@ -230,6 +240,17 @@ Examples:
 			fmt.Printf("\n📋  Clipboard copy skipped (disabled) ╰（‵□′）╯\n")
 		}
 
+		if editorEnabled {
+			fmt.Println("\n📝  Opening file in default text editor...")
+
+			err := openInEditor(outputFilePath)
+			if err != nil {
+				fmt.Printf("⚠️  Warning: failed to open editor: %v\n", err)
+			} else {
+				fmt.Println("✅  Editor closed. Proceeding...")
+			}
+		}
+
 		fmt.Printf("\n------------ (●'◡'●) ------------\n")
 		fmt.Printf("🎉  Process completed!\n")
 		fmt.Printf("📊  Files processed: %d\n", filesProcessed)
@@ -299,7 +320,7 @@ func shouldExclude(relPath, name string, isDir bool, patterns []string) bool {
 	return false
 }
 
-// formatNumber adds thousand separators to make large numbers more readable
+// formatNumber adds a thousand separators to make large numbers more readable
 func formatNumber(n int) string {
 	str := fmt.Sprintf("%d", n)
 	if len(str) <= 3 {
@@ -329,4 +350,24 @@ func formatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// openInEditor opens the given file in the system's default text editor.
+func openInEditor(filePath string) error {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", filePath)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", filePath)
+	default: // Linux and others
+		cmd = exec.Command("xdg-open", filePath)
+	}
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	return cmd.Run()
 }
