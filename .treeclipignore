@@ -1,2 +1,6 @@
 *.txt
 test_cliptree_ignore
+README.md
+***.mod
+***.sum
+*.gitignore

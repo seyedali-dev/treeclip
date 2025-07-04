@@ -3,76 +3,49 @@ package cmd
 
 import (
 	"fmt"
-	"io"
+	fileUtils "github.com/seyedali-dev/treeclip/pkg/utils"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strings"
 
-	"github.com/atotto/clipboard"
+	"github.com/seyedali-dev/treeclip/internal/clipboard"
+	"github.com/seyedali-dev/treeclip/internal/editor"
+	"github.com/seyedali-dev/treeclip/internal/exclude"
+	"github.com/seyedali-dev/treeclip/internal/traversal"
 	"github.com/spf13/cobra"
 )
 
+// outputFile is the temporary traversed file created via treeclip.
+const outputFile = "treeclip_temp.txt"
+
 var (
-	excludePatterns    []string // excludePatterns holds the patterns to exclude during directory traversal.
-	clipboardEnabled   bool     // clipboardEnabled controls whether to copy output to clipboard.
-	showClipboardStats bool     // showClipboardStats shows clipboard content statistics.
-	editorEnabled      bool     // editorEnabled controls whether to open the output file in a text editor.
-	deleteAfterEditor  bool     // deleteAfterEditor controls whether the output file should be deleted after the editor closes.
+	excludePatterns    []string
+	clipboardEnabled   bool
+	showClipboardStats bool
+	editorEnabled      bool
+	deleteAfterEditor  bool
 )
 
 func init() {
+	runCmd.Flags().StringSliceVarP(&excludePatterns, "exclude", "e", []string{}, "Exclude files/folders matching these patterns (can be used multiple times)")
+	runCmd.Flags().BoolVarP(&clipboardEnabled, "clipboard", "c", true, "Copy output to clipboard")
+	runCmd.Flags().BoolVar(&showClipboardStats, "stats", false, "Show clipboard content statistics")
+	runCmd.Flags().BoolVarP(&editorEnabled, "editor", "o", false, "Open output file in the default text editor")
+	runCmd.Flags().BoolVarP(&deleteAfterEditor, "delete", "d", true, "Delete the output file after editor is closed")
+
 	rootCmd.AddCommand(runCmd)
-
-	// Add the --exclude flag that can be used multiple times
-	runCmd.Flags().StringSliceVarP(
-		&excludePatterns,
-		"exclude",
-		"e",
-		[]string{},
-		"Exclude files/folders matching these patterns (can be used multiple times)",
-	)
-
-	// Add clipboard-related flags
-	runCmd.Flags().BoolVarP(
-		&clipboardEnabled,
-		"clipboard",
-		"c",
-		true,
-		"Copy output to clipboard",
-	)
-	runCmd.Flags().BoolVar(
-		&showClipboardStats,
-		"stats",
-		false,
-		"Show clipboard content statistics",
-	)
-
-	// Add the --editor flag to open the extracted text into a default editor
-	runCmd.Flags().BoolVarP(
-		&editorEnabled,
-		"editor",
-		"o",
-		false,
-		"Open output file in the default text editor",
-	)
-
-	// Add the --delete flag to delete the temp file after exiting editor
-	runCmd.Flags().BoolVarP(
-		&deleteAfterEditor,
-		"delete",
-		"d",
-		true,
-		"Delete the output file after editor is closed",
-	)
 }
 
 // runCmd concatenates the contents of all files in a given directory and writes them to a text file.
 var runCmd = &cobra.Command{
 	Use:   "run [path | cwd if empty]",
 	Short: "Traverse a folder and output all file contents into a .txt file",
-	Long: `Traverse a folder recursively and output all file contents into a .txt file.
+	Long:  generateLongDescription(),
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  registerRunCmd(),
+}
+
+func generateLongDescription() string {
+	return `Traverse a folder recursively and output all file contents into a .txt file.
     
 Examples:
   treeclip run                                     # Current directory, copy to clipboard
@@ -81,347 +54,76 @@ Examples:
   treeclip run -e "*.md" -e "folder1" -e "app.go"  # Multiple exclusions
   treeclip run --stats                             # Show content statistics
   treeclip run --editor                            # Open output file in the default text editor
-  treeclip run --delete                            # Delete the output file after editor is closed`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Determine root path to walk
-		var rootDir string
-		if len(args) > 0 {
-			var err error
-			rootDir, err = filepath.Abs(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid path: %w", err)
-			}
-		} else {
-			// Default to current directory
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("failed to get current directory: %w", err)
-			}
-			rootDir = cwd
-		}
+  treeclip run --delete                            # Delete the output file after editor is closed`
+}
 
-		// Validate that the root directory exists
-		if _, err := os.Stat(rootDir); os.IsNotExist(err) {
-			return fmt.Errorf("directory does not exist: %s", rootDir)
-		}
-
-		// Create output file in CWD
-		outputFilePath := "treeclip_output.txt"
-		outputFile, err := os.Create(outputFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to create output file: %w", err)
-		}
-		fmt.Fprintln(outputFile, "// 💡Paths are displayed in Unix-style format (forward slashes) for cross-platform consistency")
-		fmt.Fprintln(outputFile)
-		fmt.Printf("🔍  Scanning directory: %s (¬‿¬)\n", rootDir)
-
-		// Add default exclusions to prevent infinite loops and common unwanted files
-		defaultExclusions := []string{
-			"treeclip_output.txt", // Our own output file. Prevent recursion!
-			"*.tmp",
-			"*.temp",
-			"*.exe",
-			"*.sh",
-			".git",
-			".idea",
-			".DS_Store",
-			"Thumbs.db",
-		}
-
-		// Load .treeclipignore patterns from root directory
-		ignoreFilePatterns, err := loadIgnorePatterns(rootDir)
+// registerRunCmd handles the actual logic for treeclip dir traversal.
+func registerRunCmd() func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		// Determine root path
+		rootDir, err := determineRootDir(args)
 		if err != nil {
 			return err
 		}
-		if len(ignoreFilePatterns) > 0 {
-			fmt.Printf("📁  .treeclipignore loaded: %v (ᵔᴥᵔ)\n", ignoreFilePatterns)
-		}
 
-		// Merge all: CLI flags + .treeclipignore + defaults
-		allExcludePatterns := append([]string{}, excludePatterns...)
-		allExcludePatterns = append(allExcludePatterns, ignoreFilePatterns...)
-		allExcludePatterns = append(allExcludePatterns, defaultExclusions...)
-
-		if len(excludePatterns) > 0 {
-			fmt.Printf("🚫  User CLI command exclusions: %v (｀へ´)\n", excludePatterns)
-		}
-		if len(ignoreFilePatterns) > 0 {
-			fmt.Printf("🚫  User .treeclipignore exclusions: %v (｀へ´)\n", ignoreFilePatterns)
-		}
-		fmt.Printf("🛡️  Default exclusions: %v (◕‿◕)\n", defaultExclusions)
-		fmt.Printf("📄  Writing concatenated contents to: %s (ᵔᴥᵔ)\n\n", outputFilePath)
-
-		var filesProcessed int
-		var filesSkipped int
-
-		// Walk directory recursively
-		err = filepath.WalkDir(rootDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			// Calculate relative path for pattern matching and display
-			relPath, err := filepath.Rel(rootDir, path)
-			if err != nil {
-				return err
-			}
-			normalizedCrossPlatformRelPath := filepath.ToSlash(relPath)
-
-			// Check if current path should be excluded (using combined patterns)
-			if shouldExclude(relPath, d.Name(), d.IsDir(), allExcludePatterns) {
-				filesSkipped++
-				if d.IsDir() {
-					fmt.Printf("⏭️  Skipping directory: %s\n", normalizedCrossPlatformRelPath)
-					return filepath.SkipDir // Skip entire directory
-				}
-				fmt.Printf("⏭️  Skipping file: %s\n", normalizedCrossPlatformRelPath)
-				return nil
-			}
-
-			// Skip directories (we only want to process files)
-			if d.IsDir() {
-				return nil
-			}
-
-			filesProcessed++
-			fmt.Printf("📖  Processing: %s (☞ﾟヮﾟ)☞\n", normalizedCrossPlatformRelPath)
-
-			// Write file header with relative path
-			fmt.Fprintf(outputFile, "==> %s\n", normalizedCrossPlatformRelPath)
-
-			// Open file and copy content
-			f, err := os.Open(path)
-			if err != nil {
-				fmt.Printf("⚠️  Warning: failed to open %s: %v (╯°□°）╯︵ ┻━┻\n", normalizedCrossPlatformRelPath, err)
-				fmt.Fprintf(outputFile, "❌🪲  [ERROR: Could not read file - %v] (ノಠ益ಠ)ノ\n\n", err)
-				return nil
-			}
-
-			// Copy file content to output
-			_, err = io.Copy(outputFile, f)
-			if err != nil {
-				fmt.Printf("⚠️  Warning: failed to copy content from %s: %v\n", normalizedCrossPlatformRelPath, err)
-				fmt.Fprintf(outputFile, "❌🪲  [ERROR: Could not copy file content - %v]\n", err)
-			}
-
-			// Add separator between files
-			fmt.Fprintln(outputFile)
-
-			return nil
-		})
-
+		// Create output file
+		outF, err := os.Create(outputFile)
 		if err != nil {
-			return fmt.Errorf("error while traversing directory: %w", err)
+			return fmt.Errorf("failed to create output file: %w", err)
+		}
+		fileUtils.WriteDataLn(outF, "// 💡Paths are displayed in Unix-style format (forward slashes)")
+
+		// Load exclusions
+		ignoreFilePatterns, err := exclude.LoadIgnorePatterns(rootDir)
+		if err != nil {
+			return err
+		}
+		allEx := append(excludePatterns, ignoreFilePatterns...)
+		allEx = append(allEx, exclude.DefaultExclusions...)
+
+		// Traverse and write
+		filesProcessed, filesSkipped, err := traversal.TraverseDir(rootDir, allEx, outF)
+		if err != nil {
+			return err
 		}
 
-		// Close the output file before reading it for clipboard
-		if err := outputFile.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to close output file: %v\n", err)
+		fileUtils.SafeCloseFile(outF)
+
+		// Clipboard
+		if err := clipboard.HandleClipboardCommandFlag(clipboardEnabled, showClipboardStats, outputFile); err != nil {
+			return err
 		}
 
-		// Read the output file content for clipboard if enabled
-		if clipboardEnabled {
-			fmt.Printf("\n📋  Copying content to clipboard... (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧\n")
-			clipboardContent, err := os.ReadFile(outputFilePath)
-			if err != nil {
-				return fmt.Errorf("failed to read output file for clipboard: %w", err)
-			}
-
-			// Copy to clipboard
-			err = clipboard.WriteAll(string(clipboardContent))
-			if err != nil {
-				fmt.Printf("⚠️  Warning: failed to copy to clipboard: %v\n", err)
-				fmt.Printf("💡  Content is still available in: %s\n", outputFilePath)
-			} else {
-				fmt.Printf("✅  Content copied to clipboard successfully! ヽ(•‿•)ノ\n")
-
-				// Show clipboard statistics if requested
-				if showClipboardStats {
-					contentStr := string(clipboardContent)
-					lines := strings.Split(contentStr, "\n")
-					chars := len(contentStr)
-					words := len(strings.Fields(contentStr))
-
-					fmt.Printf("📊  Clipboard content stats:\n")
-					fmt.Printf("   📝  Characters: %s\n", formatNumber(chars))
-					fmt.Printf("   📄  Lines: %s\n", formatNumber(len(lines)))
-					fmt.Printf("   💬  Words: %s\n", formatNumber(words))
-
-					// Show size in human-readable format
-					fmt.Printf("   💾  Size: %s\n", formatBytes(int64(chars)))
-				}
-			}
-		} else {
-			fmt.Printf("\n📋  Clipboard copy skipped (disabled) (︶︹︶)\n")
-		}
-
-		if editorEnabled {
-			fmt.Println("\n📝  Opening file in default text editor... (◠‿◠)✎")
-			if deleteAfterEditor {
-				fmt.Println("⚠️  Warning! Will delete the temporary file after editor closes (×_×)⌒☆")
-			}
-
-			err := openInEditor(outputFilePath)
-			if err != nil {
-				fmt.Printf("⚠️  Warning: failed to open editor: %v\n", err)
-			} else {
-				fmt.Println("✅  Editor closed. Proceeding... (ﾉ´ヮ`)ﾉ*: ･ﾟ")
-
-				if deleteAfterEditor {
-					fmt.Println()
-					fmt.Println("\n🗑️  Attempting to delete the temp file (⋟﹏⋞)")
-					err := os.Remove(outputFilePath)
-					if err != nil {
-						fmt.Printf("⚠️  Warning: failed to delete file: %v\n", err)
-					} else {
-						fmt.Printf("🧽  Output temp file deleted: %s (￣ω￣)\n", outputFilePath)
-					}
-				}
-			}
+		// Editor
+		if err := editor.HandleEditorCommandFlag(editorEnabled, deleteAfterEditor, outputFile); err != nil {
+			return err
 		}
 
 		fmt.Printf("\n------------ (●'◡'●) ------------\n")
 		fmt.Printf("🎉  Process completed! ＼(＾▽＾)／\n")
 		fmt.Printf("📊  Files processed: %d (•̀ᴗ•́)و\n", filesProcessed)
 		fmt.Printf("🚫  Files/folders skipped: %d (；一_一)\n", filesSkipped)
-		fmt.Printf("📄  Output file: %s (ᵔ◡ᵔ)\n", outputFilePath)
+		fmt.Printf("📄  Output file: %s (ᵔ◡ᵔ)\n", outputFile)
 		fmt.Println("\n  totoro!  ㄟ( ▔, ▔ )ㄏ")
 		return nil
-	},
+	}
 }
 
-// shouldExclude checks if a file or directory should be excluded based on the exclude patterns.
-// It supports:
-// - Exact filename/dirname matches (e.g., "app.go", "folder1")
-// - Wildcard patterns (e.g., "*.log", "*.md")
-// - Relative path matches (e.g., "src/*.go")
-func shouldExclude(relPath, name string, isDir bool, patterns []string) bool {
-	// Normalize the relative path to use forward slashes
-	normalizedRelPath := filepath.ToSlash(relPath)
-
-	for _, pattern := range patterns {
-		pattern = strings.TrimSpace(pattern)
-		if pattern == "" {
-			continue
+// determineRootDir determines the root directory to traverse to.
+func determineRootDir(args []string) (string, error) {
+	rootDir := "."
+	if len(args) > 0 {
+		rootPathArg, err := filepath.Abs(args[0])
+		if err != nil {
+			return "", fmt.Errorf("invalid path: %w", err)
 		}
-
-		// Normalize the pattern to use forward slashes
-		normalizedPattern := filepath.ToSlash(pattern)
-
-		// Check exact name match
-		if name == pattern || name == filepath.Base(normalizedPattern) {
-			return true
+		rootDir = rootPathArg
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get cwd: %w", err)
 		}
-
-		// Check exact relative path match (both normalized)
-		if normalizedRelPath == normalizedPattern {
-			return true
-		}
-
-		// Check wildcard pattern match against filename
-		if matched, _ := filepath.Match(normalizedPattern, name); matched {
-			return true
-		}
-
-		// Check wildcard pattern match against relative path
-		if matched, _ := filepath.Match(normalizedPattern, normalizedRelPath); matched {
-			return true
-		}
-
-		// For directories, check parent directories
-		if isDir {
-			pathParts := strings.Split(normalizedRelPath, "/")
-			for _, part := range pathParts {
-				if matched, _ := filepath.Match(normalizedPattern, part); matched {
-					return true
-				}
-			}
-		}
+		rootDir = cwd
 	}
-	return false
-}
-
-// formatNumber adds a thousand separators to make large numbers more readable
-func formatNumber(n int) string {
-	str := fmt.Sprintf("%d", n)
-	if len(str) <= 3 {
-		return str
-	}
-
-	// Add commas every 3 digits from the right
-	var result strings.Builder
-	for i, digit := range str {
-		if i > 0 && (len(str)-i)%3 == 0 {
-			result.WriteString(",")
-		}
-		result.WriteRune(digit)
-	}
-	return result.String()
-}
-
-// formatBytes converts bytes to human-readable format (B, KB, MB, GB)
-func formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
-// openInEditor opens the given file in the system's default text editor and waits for it to close.
-func openInEditor(filePath string) error {
-	var cmd *exec.Cmd
-
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", "-W", filePath) //TODO: test me!
-	case "windows":
-		cmd = exec.Command("cmd", "/C", "start", "/WAIT", filePath)
-	default: // Linux and others
-		cmd = exec.Command("xdg-open", filePath) //TODO: test me!
-	}
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	return cmd.Run()
-}
-
-// loadIgnorePatterns reads .treeclipignore from the given root path and returns a slice of patterns.
-func loadIgnorePatterns(rootPath string) ([]string, error) {
-	var patterns []string
-
-	ignoreFilePath := filepath.Join(rootPath, ".treeclipignore")
-
-	content, err := os.ReadFile(ignoreFilePath)
-	if err != nil {
-		// File does not exist — not an error
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to read .treeclipignore: %w (ノಠ益ಠ)ノ", err)
-	}
-
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Normalize slashes for cross-platform support
-		line = filepath.ToSlash(line)
-		patterns = append(patterns, line)
-	}
-
-	return patterns, nil
+	return rootDir, nil
 }
