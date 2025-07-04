@@ -192,7 +192,6 @@ Examples:
 
 			// Add separator between files
 			fmt.Fprintln(outputFile)
-			fmt.Fprintln(outputFile)
 
 			return nil
 		})
