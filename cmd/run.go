@@ -283,56 +283,48 @@ Examples:
 // - Wildcard patterns (e.g., "*.log", "*.md")
 // - Relative path matches (e.g., "src/*.go")
 func shouldExclude(relPath, name string, isDir bool, patterns []string) bool {
+	// Normalize the relative path to use forward slashes
+	normalizedRelPath := filepath.ToSlash(relPath)
+
 	for _, pattern := range patterns {
-		// Clean the pattern to handle different input formats
 		pattern = strings.TrimSpace(pattern)
 		if pattern == "" {
 			continue
 		}
 
-		// Check exact name match (for both files and directories)
-		if name == pattern {
+		// Normalize the pattern to use forward slashes
+		normalizedPattern := filepath.ToSlash(pattern)
+
+		// Check exact name match
+		if name == pattern || name == filepath.Base(normalizedPattern) {
 			return true
 		}
 
-		// Check exact relative path match
-		if relPath == pattern {
+		// Check exact relative path match (both normalized)
+		if normalizedRelPath == normalizedPattern {
 			return true
 		}
 
 		// Check wildcard pattern match against filename
-		if matched, err := filepath.Match(pattern, name); err == nil && matched {
+		if matched, _ := filepath.Match(normalizedPattern, name); matched {
 			return true
 		}
 
 		// Check wildcard pattern match against relative path
-		if matched, err := filepath.Match(pattern, relPath); err == nil && matched {
+		if matched, _ := filepath.Match(normalizedPattern, normalizedRelPath); matched {
 			return true
 		}
 
-		// For directories, also check if the pattern matches any parent directory
+		// For directories, check parent directories
 		if isDir {
-			// Check if any part of the relative path matches the pattern
-			pathParts := strings.Split(relPath, string(filepath.Separator))
+			pathParts := strings.Split(normalizedRelPath, "/")
 			for _, part := range pathParts {
-				if part == pattern {
+				if matched, _ := filepath.Match(normalizedPattern, part); matched {
 					return true
 				}
-				if matched, err := filepath.Match(pattern, part); err == nil && matched {
-					return true
-				}
-			}
-		}
-
-		// Handle patterns that might include path separators
-		// e.g., "src/*.go" should match files in src directory
-		if strings.Contains(pattern, string(filepath.Separator)) {
-			if matched, err := filepath.Match(pattern, relPath); err == nil && matched {
-				return true
 			}
 		}
 	}
-
 	return false
 }
 
