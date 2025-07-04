@@ -131,12 +131,12 @@ Examples:
 		// Combine user patterns with default exclusions
 		allExcludePatterns := append(excludePatterns, defaultExclusions...)
 
-		fmt.Printf("🔍  Scanning directory: %s\n", rootDir)
+		fmt.Printf("🔍  Scanning directory: %s (¬‿¬)\n", rootDir)
 		if len(excludePatterns) > 0 {
-			fmt.Printf("🚫  User exclusions: %v\n", excludePatterns)
+			fmt.Printf("🚫  User exclusions: %v (｀へ´)\n", excludePatterns)
 		}
-		fmt.Printf("🛡️  Default exclusions: %v\n", defaultExclusions)
-		fmt.Printf("📄  Writing concatenated contents to: %s\n\n", outputFilePath)
+		fmt.Printf("🛡️  Default exclusions: %v (◕‿◕)\n", defaultExclusions)
+		fmt.Printf("📄  Writing concatenated contents to: %s (ᵔᴥᵔ)\n\n", outputFilePath)
 
 		var filesProcessed int
 		var filesSkipped int
@@ -171,7 +171,7 @@ Examples:
 			}
 
 			filesProcessed++
-			fmt.Printf("📖  Processing: %s\n", normalizedCrossPlatformRelPath)
+			fmt.Printf("📖  Processing: %s (☞ﾟヮﾟ)☞\n", normalizedCrossPlatformRelPath)
 
 			// Write file header with relative path
 			fmt.Fprintf(outputFile, "==> %s\n", normalizedCrossPlatformRelPath)
@@ -179,9 +179,9 @@ Examples:
 			// Open file and copy content
 			f, err := os.Open(path)
 			if err != nil {
-				fmt.Printf("⚠️  Warning: failed to open %s: %v\n", normalizedCrossPlatformRelPath, err)
-				fmt.Fprintf(outputFile, "❌🪲  [ERROR: Could not read file - %v]\n\n", err)
-				return nil // Continue processing other files
+				fmt.Printf("⚠️  Warning: failed to open %s: %v (╯°□°）╯︵ ┻━┻\n", normalizedCrossPlatformRelPath, err)
+				fmt.Fprintf(outputFile, "❌🪲  [ERROR: Could not read file - %v] (ノಠ益ಠ)ノ\n\n", err)
+				return nil
 			}
 
 			// Copy file content to output
@@ -208,7 +208,7 @@ Examples:
 
 		// Read the output file content for clipboard if enabled
 		if clipboardEnabled {
-			fmt.Printf("\n📋  Copying content to clipboard...\n")
+			fmt.Printf("\n📋  Copying content to clipboard... (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧\n")
 			clipboardContent, err := os.ReadFile(outputFilePath)
 			if err != nil {
 				return fmt.Errorf("failed to read output file for clipboard: %w", err)
@@ -220,7 +220,7 @@ Examples:
 				fmt.Printf("⚠️  Warning: failed to copy to clipboard: %v\n", err)
 				fmt.Printf("💡  Content is still available in: %s\n", outputFilePath)
 			} else {
-				fmt.Printf("✅  Content copied to clipboard successfully! (U ω U)\n")
+				fmt.Printf("✅  Content copied to clipboard successfully! ヽ(•‿•)ノ\n")
 
 				// Show clipboard statistics if requested
 				if showClipboardStats {
@@ -239,40 +239,40 @@ Examples:
 				}
 			}
 		} else {
-			fmt.Printf("\n📋  Clipboard copy skipped (disabled) ╰（‵□′）╯\n")
+			fmt.Printf("\n📋  Clipboard copy skipped (disabled) (︶︹︶)\n")
 		}
 
 		if editorEnabled {
-			fmt.Println("\n📝  Opening file in default text editor...")
+			fmt.Println("\n📝  Opening file in default text editor... (◠‿◠)✎")
 			if deleteAfterEditor {
-				fmt.Println("⚠️  Warning! Will delete the temporary file after editor closes 🗑️")
+				fmt.Println("⚠️  Warning! Will delete the temporary file after editor closes (×_×)⌒☆")
 			}
 
 			err := openInEditor(outputFilePath)
 			if err != nil {
 				fmt.Printf("⚠️  Warning: failed to open editor: %v\n", err)
 			} else {
-				fmt.Println("✅  Editor closed. Proceeding...")
+				fmt.Println("✅  Editor closed. Proceeding... (ﾉ´ヮ`)ﾉ*: ･ﾟ")
 
 				if deleteAfterEditor {
 					fmt.Println()
-					fmt.Println("🗑️  Attempting to delete the temp file")
+					fmt.Println("\n🗑️  Attempting to delete the temp file (⋟﹏⋞)")
 					err := os.Remove(outputFilePath)
 					if err != nil {
 						fmt.Printf("⚠️  Warning: failed to delete file: %v\n", err)
 					} else {
-						fmt.Printf("🧽  Output temp file deleted: %s\n", outputFilePath)
+						fmt.Printf("🧽  Output temp file deleted: %s (￣ω￣)\n", outputFilePath)
 					}
 				}
 			}
 		}
 
 		fmt.Printf("\n------------ (●'◡'●) ------------\n")
-		fmt.Printf("🎉  Process completed!\n")
-		fmt.Printf("📊  Files processed: %d\n", filesProcessed)
-		fmt.Printf("🚫  Files/folders skipped: %d\n", filesSkipped)
-		fmt.Printf("📄  Output file: %s\n", outputFilePath)
-		fmt.Println("\n\n  tototo!  ㄟ( ▔, ▔ )ㄏ")
+		fmt.Printf("🎉  Process completed! ＼(＾▽＾)／\n")
+		fmt.Printf("📊  Files processed: %d (•̀ᴗ•́)و\n", filesProcessed)
+		fmt.Printf("🚫  Files/folders skipped: %d (；一_一)\n", filesSkipped)
+		fmt.Printf("📄  Output file: %s (ᵔ◡ᵔ)\n", outputFilePath)
+		fmt.Println("\n  totoro!  ㄟ( ▔, ▔ )ㄏ")
 		return nil
 	},
 }
