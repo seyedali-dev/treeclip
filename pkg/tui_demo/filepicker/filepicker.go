@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/charmbracelet/bubbles/filepicker"
-	tea "github.com/charmbracelet/bubbletea"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/bubbles/filepicker"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // DirPickerModel represents the Bubble Tea model for directory picking.

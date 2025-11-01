@@ -3,13 +3,14 @@ package traversal
 
 import (
 	"fmt"
-	"github.com/seyedali-dev/treeclip/internal/exclude"
-	"github.com/seyedali-dev/treeclip/internal/output"
-	"github.com/seyedali-dev/treeclip/pkg/utils"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/seyedali-dev/treeclip/internal/exclude"
+	"github.com/seyedali-dev/treeclip/internal/output"
+	"github.com/seyedali-dev/treeclip/pkg/utils"
 )
 
 // TraverseDir walks root, writes each file via formatter, returns counts.

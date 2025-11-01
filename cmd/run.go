@@ -3,9 +3,10 @@ package cmd
 
 import (
 	"fmt"
-	fileUtils "github.com/seyedali-dev/treeclip/pkg/utils"
 	"os"
 	"path/filepath"
+
+	fileUtils "github.com/seyedali-dev/treeclip/pkg/utils"
 
 	"github.com/seyedali-dev/treeclip/internal/clipboard"
 	"github.com/seyedali-dev/treeclip/internal/editor"

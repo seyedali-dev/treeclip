@@ -3,10 +3,11 @@ package clipboard
 
 import (
 	"fmt"
-	atottoClip "github.com/atotto/clipboard"
-	"github.com/seyedali-dev/treeclip/pkg/utils"
 	"os"
 	"strings"
+
+	atottoClip "github.com/atotto/clipboard"
+	"github.com/seyedali-dev/treeclip/pkg/utils"
 )
 
 // HandleClipboardCommandFlag handles clipboardEnabled command flag.
